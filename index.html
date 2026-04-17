@@ -1,9 +1,9 @@
 <!DOCTYPE html>
-<html lang="zh-Hans">
+<html lang="zh-Hant">
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Minesweeper - E Ink</title>
+  <title>踩地雷 - E Ink</title>
   <style>
     * {
       margin: 0;
@@ -152,21 +152,21 @@
     <div class="controls">
       <div class="difficulty-select">
         <label>
-          <input type="radio" name="difficulty" value="easy"> 简 (10)
+          <input type="radio" name="difficulty" value="easy"> 簡 (10)
         </label>
         <label>
           <input type="radio" name="difficulty" value="normal" checked> 中 (20)
         </label>
         <label>
-          <input type="radio" name="difficulty" value="hard"> 难 (30)
+          <input type="radio" name="difficulty" value="hard"> 難 (30)
         </label>
       </div>
       
-      <button id="newgame">新游戏</button>
+      <button id="newgame">新遊戲</button>
       
       <div class="stats">
         <span>地雷: <span id="flagged">0</span>/<span id="totalMines">20</span></span>
-        <span>时间: <span id="timer">0</span>s</span>
+        <span>時間: <span id="timer">0</span>s</span>
       </div>
     </div>
     
@@ -372,10 +372,10 @@
       const message = document.getElementById('message');
       if (won) {
         message.className = 'state-message win';
-        message.textContent = '🎉 赢了！';
+        message.textContent = '🎉 贏了！';
       } else {
         message.className = 'state-message lose';
-        message.textContent = '💥 游戏结束';
+        message.textContent = '💥 遊戲結束';
       }
     }
 
