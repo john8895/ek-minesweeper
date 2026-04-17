@@ -1,0 +1,394 @@
+<!DOCTYPE html>
+<html lang="zh-Hans">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Minesweeper - E Ink</title>
+  <style>
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      background: #f5f5f5;
+      padding: 10px;
+      color: #000;
+    }
+    .container {
+      max-width: 600px;
+      margin: 0 auto;
+      background: #fff;
+      padding: 20px;
+      border-radius: 8px;
+    }
+    h1 {
+      text-align: center;
+      font-size: 24px;
+      margin-bottom: 20px;
+    }
+    .controls {
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+      margin-bottom: 20px;
+      padding: 12px;
+      background: #f9f9f9;
+      border-radius: 6px;
+    }
+    .difficulty-select {
+      display: flex;
+      gap: 8px;
+      flex-wrap: wrap;
+    }
+    .difficulty-select label {
+      cursor: pointer;
+    }
+    .difficulty-select input {
+      cursor: pointer;
+      width: 16px;
+      height: 16px;
+    }
+    #newgame {
+      padding: 10px 20px;
+      font-size: 16px;
+      background: #000;
+      color: #fff;
+      border: none;
+      border-radius: 4px;
+      cursor: pointer;
+      font-weight: bold;
+    }
+    #newgame:active {
+      background: #333;
+    }
+    .stats {
+      display: flex;
+      justify-content: space-around;
+      font-size: 16px;
+      font-weight: bold;
+    }
+    .stats span {
+      padding: 8px 0;
+    }
+    .board {
+      display: grid;
+      grid-template-columns: repeat(10, 1fr);
+      gap: 2px;
+      background: #ddd;
+      padding: 6px;
+      border-radius: 4px;
+      max-width: 500px;
+      margin: 0 auto;
+    }
+    .cell {
+      aspect-ratio: 1;
+      background: #fff;
+      border: 2px solid #999;
+      font-size: 14px;
+      font-weight: bold;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      user-select: none;
+      -webkit-user-select: none;
+    }
+    .cell:active {
+      background: #e0e0e0;
+    }
+    .cell.opened {
+      background: #f0f0f0;
+      border: 1px solid #bbb;
+      cursor: default;
+    }
+    .cell.mine {
+      background: #000;
+      color: #fff;
+    }
+    .cell.flagged {
+      background: #fff;
+      border: 2px solid #f00;
+      color: #f00;
+      font-weight: bold;
+    }
+    .cell.flagged::after {
+      content: "🚩";
+    }
+    .state-message {
+      text-align: center;
+      font-size: 18px;
+      font-weight: bold;
+      margin-top: 20px;
+      padding: 12px;
+      border-radius: 4px;
+    }
+    .state-message.win {
+      background: #d4edda;
+      color: #155724;
+    }
+    .state-message.lose {
+      background: #f8d7da;
+      color: #721c24;
+    }
+    @media (max-width: 480px) {
+      .container {
+        padding: 12px;
+      }
+      h1 {
+        font-size: 20px;
+      }
+      .cell {
+        font-size: 12px;
+      }
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <h1>踩地雷</h1>
+    
+    <div class="controls">
+      <div class="difficulty-select">
+        <label>
+          <input type="radio" name="difficulty" value="easy"> 简 (10)
+        </label>
+        <label>
+          <input type="radio" name="difficulty" value="normal" checked> 中 (20)
+        </label>
+        <label>
+          <input type="radio" name="difficulty" value="hard"> 难 (30)
+        </label>
+      </div>
+      
+      <button id="newgame">新游戏</button>
+      
+      <div class="stats">
+        <span>地雷: <span id="flagged">0</span>/<span id="totalMines">20</span></span>
+        <span>时间: <span id="timer">0</span>s</span>
+      </div>
+    </div>
+    
+    <div id="board" class="board"></div>
+    <div id="message"></div>
+  </div>
+
+  <script>
+    const GRID_SIZE = 10;
+    const DIFFICULTIES = {
+      easy: 10,
+      normal: 20,
+      hard: 30
+    };
+
+    let gameState = {
+      board: [],
+      revealed: [],
+      flagged: [],
+      mines: 0,
+      isGameOver: false,
+      isWon: false,
+      startTime: null,
+      timerInterval: null
+    };
+
+    function getDifficulty() {
+      const selected = document.querySelector('input[name="difficulty"]:checked');
+      return selected.value;
+    }
+
+    function initGame() {
+      const difficulty = getDifficulty();
+      gameState.mines = DIFFICULTIES[difficulty];
+      document.getElementById('totalMines').textContent = gameState.mines;
+      
+      gameState.board = Array(GRID_SIZE).fill(null).map(() => Array(GRID_SIZE).fill(0));
+      gameState.revealed = Array(GRID_SIZE).fill(null).map(() => Array(GRID_SIZE).fill(false));
+      gameState.flagged = Array(GRID_SIZE).fill(null).map(() => Array(GRID_SIZE).fill(false));
+      gameState.isGameOver = false;
+      gameState.isWon = false;
+      gameState.startTime = null;
+      
+      if (gameState.timerInterval) clearInterval(gameState.timerInterval);
+      document.getElementById('timer').textContent = '0';
+      document.getElementById('flagged').textContent = '0';
+      document.getElementById('message').textContent = '';
+      
+      let minesPlaced = 0;
+      while (minesPlaced < gameState.mines) {
+        const x = Math.floor(Math.random() * GRID_SIZE);
+        const y = Math.floor(Math.random() * GRID_SIZE);
+        if (gameState.board[y][x] !== 'M') {
+          gameState.board[y][x] = 'M';
+          minesPlaced++;
+        }
+      }
+      
+      for (let y = 0; y < GRID_SIZE; y++) {
+        for (let x = 0; x < GRID_SIZE; x++) {
+          if (gameState.board[y][x] !== 'M') {
+            let count = 0;
+            for (let dy = -1; dy <= 1; dy++) {
+              for (let dx = -1; dx <= 1; dx++) {
+                const ny = y + dy;
+                const nx = x + dx;
+                if (ny >= 0 && ny < GRID_SIZE && nx >= 0 && nx < GRID_SIZE) {
+                  if (gameState.board[ny][nx] === 'M') count++;
+                }
+              }
+            }
+            gameState.board[y][x] = count;
+          }
+        }
+      }
+      
+      renderBoard();
+    }
+
+    function renderBoard() {
+      const board = document.getElementById('board');
+      board.innerHTML = '';
+      
+      for (let y = 0; y < GRID_SIZE; y++) {
+        for (let x = 0; x < GRID_SIZE; x++) {
+          const cell = document.createElement('div');
+          cell.className = 'cell';
+          cell.dataset.x = x;
+          cell.dataset.y = y;
+          
+          if (gameState.flagged[y][x]) {
+            cell.classList.add('flagged');
+          } else if (gameState.revealed[y][x]) {
+            cell.classList.add('opened');
+            const val = gameState.board[y][x];
+            if (val === 'M') {
+              cell.classList.add('mine');
+              cell.textContent = '💣';
+            } else if (val > 0) {
+              cell.textContent = val;
+            }
+          }
+          
+          cell.addEventListener('click', () => revealCell(x, y));
+          cell.addEventListener('contextmenu', (e) => {
+            e.preventDefault();
+            toggleFlag(x, y);
+          });
+          
+          board.appendChild(cell);
+        }
+      }
+    }
+
+    function startTimer() {
+      if (gameState.startTime) return;
+      gameState.startTime = Date.now();
+      gameState.timerInterval = setInterval(() => {
+        const elapsed = Math.floor((Date.now() - gameState.startTime) / 1000);
+        document.getElementById('timer').textContent = elapsed;
+      }, 100);
+    }
+
+    function revealCell(x, y) {
+      if (gameState.isGameOver || gameState.isWon) return;
+      if (gameState.revealed[y][x] || gameState.flagged[y][x]) return;
+      
+      startTimer();
+      
+      if (gameState.board[y][x] === 'M') {
+        gameState.isGameOver = true;
+        revealAllMines();
+        endGame(false);
+        return;
+      }
+      
+      floodFill(x, y);
+      
+      if (checkWin()) {
+        gameState.isWon = true;
+        endGame(true);
+      } else {
+        renderBoard();
+      }
+    }
+
+    function floodFill(x, y) {
+      if (x < 0 || x >= GRID_SIZE || y < 0 || y >= GRID_SIZE) return;
+      if (gameState.revealed[y][x]) return;
+      
+      gameState.revealed[y][x] = true;
+      
+      if (gameState.board[y][x] === 0) {
+        for (let dy = -1; dy <= 1; dy++) {
+          for (let dx = -1; dx <= 1; dx++) {
+            floodFill(x + dx, y + dy);
+          }
+        }
+      }
+    }
+
+    function toggleFlag(x, y) {
+      if (gameState.revealed[y][x]) return;
+      gameState.flagged[y][x] = !gameState.flagged[y][x];
+      updateFlagCount();
+      renderBoard();
+    }
+
+    function updateFlagCount() {
+      let count = 0;
+      for (let y = 0; y < GRID_SIZE; y++) {
+        for (let x = 0; x < GRID_SIZE; x++) {
+          if (gameState.flagged[y][x]) count++;
+        }
+      }
+      document.getElementById('flagged').textContent = count;
+    }
+
+    function revealAllMines() {
+      for (let y = 0; y < GRID_SIZE; y++) {
+        for (let x = 0; x < GRID_SIZE; x++) {
+          if (gameState.board[y][x] === 'M') {
+            gameState.revealed[y][x] = true;
+          }
+        }
+      }
+      renderBoard();
+    }
+
+    function checkWin() {
+      for (let y = 0; y < GRID_SIZE; y++) {
+        for (let x = 0; x < GRID_SIZE; x++) {
+          if (gameState.board[y][x] !== 'M' && !gameState.revealed[y][x]) {
+            return false;
+          }
+        }
+      }
+      return true;
+    }
+
+    function endGame(won) {
+      if (gameState.timerInterval) clearInterval(gameState.timerInterval);
+      const message = document.getElementById('message');
+      if (won) {
+        message.className = 'state-message win';
+        message.textContent = '🎉 赢了！';
+      } else {
+        message.className = 'state-message lose';
+        message.textContent = '💥 游戏结束';
+      }
+    }
+
+    document.getElementById('newgame').addEventListener('click', initGame);
+    document.querySelectorAll('input[name="difficulty"]').forEach(radio => {
+      radio.addEventListener('change', () => {
+        gameState.isGameOver = true;
+        gameState.isWon = true;
+        initGame();
+      });
+    });
+
+    initGame();
+  </script>
+</body>
+</html>
